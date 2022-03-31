@@ -5,7 +5,7 @@ LED monitoring service for HP Mediasmart Server EX49x (I'm assuming EX48x) FreeB
 
 A few notes:
 
-1. I can't thank the original programmers of the mediasmartserverd enough for all their efforts and code - I have ported the code for Acer Atmos, H340 - H342 into this service. HOWEVER - I have not activated the code.
+1. I can't thank the original programmers of the mediasmartserverd enough for all their efforts and code - I have ported the code for Acer Altos, H340 - H342 into this service. HOWEVER - I have not activated the code.
 2. If you are using an H340 - H342 or Atmos as supported in the Linux mediasmartserverd - Please compile and run the camtest program I included (just type make camtest) and send me the results in the issues section here on github. I can use that information to ensure the path id, unit number, etc., align and are properly accounted for during initialization. 
 3. HOT Swap Works with caveats:
   a. For whatever reason, the drive bay you extract a drive from - the bay light may illuminate. I don't know why this happens, and it won't turn off unless you re-start      the box. Even restarting the service doesn't affect it - and the activity lights do not appear to work 
