@@ -14,3 +14,4 @@ A few notes:
      so, unless you plan to extract/insert/extract ad nauseam, it shouldn't and hasn't been an issue for day-to-day operations.
 4. hpex49xled is threaded - one thread per disk. I am only looking at IDE devices, I am only looking for four devices, and I am only looking at the four devices in the      enclosure. If adding external eSATA or USB drives causes an issue - please report it to me with some 
    trace information (like what camtest is telling you the box sees) and I'll track down the issue and fix the code.
+5. after running 'make install' as root - you will need to add the following to the bottom of your /etc/rc.conf file: hpex49xled_enable="YES"
