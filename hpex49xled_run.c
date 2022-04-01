@@ -53,6 +53,7 @@
 #include <pwd.h>
 #include <syslog.h>
 #include <pthread.h>
+#include <pthread_np.h>
 #include <machine/cpufunc.h>
 
 #include <sys/param.h>
@@ -84,11 +85,12 @@ char *HD = "IDE";
 size_t debug = 0;
 size_t HP = 1; /* for now set all options to HP */
 int io; 
+int openkvm = 1; /* track changes to kvm_t *kd status */
 
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
 
-const char *VERSION = "0.9.9";
+const char *VERSION = "1.0.1";
 const char *progname;
 extern const char *hardware;
 
@@ -135,7 +137,7 @@ int show_help(char * progname )
 int show_version(char * progname ) 
 {
 	char *this = curdir(progname);
-        printf("%s %s %s %s %s %s %s",this,VERSION,"compiled on", __DATE__,"at", __TIME__ ,"\n") ;
+        printf("%s v%s %s %s %s %s %s",this,VERSION,"compiled on", __DATE__,"at", __TIME__ ,"\n") ;
         return 0;
 };
 
@@ -166,6 +168,7 @@ size_t disk_init(void)
     long double etime = 1.00; /* unneeded for our needs but passed in case of future need */
 	size_t disks = 0;
 	num_matches = 0;
+	openkvm = 1;
 
 	matches = NULL;
 
@@ -200,8 +203,8 @@ size_t disk_init(void)
 	if( specified_devices[0] == NULL )
 		err(1, "malloc failed for specified_devices[a]");
 
-	if( ( sprintf(specified_devices[0],"%i", 4)) <= 0)
-		err(1, "Unable to sprintf() into specified_devices[0] in %s line %d", __FUNCTION__, __LINE__);
+	assert(sizeof(specified_devices[0]) > sizeof("4"));
+	strlcpy(specified_devices[0], "4", sizeof(specified_devices[0]));
 
 	maxshowdevs = 4;
 	num_devices = cur.dinfo->numdevs;
@@ -273,7 +276,8 @@ size_t disk_init(void)
 		cam_dev = cam_open_device(devicename, O_RDWR);
 
 		if(debug) {
-			printf("struct devinfo device name after adding 0-3 is %s \n",devicename);
+			printf("Struct devinfo device name after adding 0-3 is %s \n",devicename);
+			printf("The string length of %s is %ld\n", devicename, (strlen(devicename)));
 			printf("CAM device name is : %s \n", cam_dev->device_name);
 			printf("The Unit Number is: %i \n", cam_dev->dev_unit_num);
 			printf("The Sim Name is: %s \n", cam_dev->sim_name);
@@ -286,12 +290,11 @@ size_t disk_init(void)
 			printf("The value to be assined to hpled.dev_index is %ld\n", di);
 			printf("The file descriptor is: %i \n\n\n",cam_dev->fd);
 		}
-
 		/* on a HP EX48x and EX49x there are only 4 IDE devices. These will always be the same */
 		/* rather than mess around with dynamically allocating and figuring them out, Just if/else if them here */
-
 		if( cam_dev->path_id == 1 && cam_dev->target_id == 0) {
-			sprintf(ide0.path,"%s",devicename);
+			assert(sizeof(devicename) < sizeof(ide0.path));
+			strlcpy(ide0.path,devicename, sizeof(ide0.path));
 			ide0.target_id = cam_dev->target_id;		
 			ide0.path_id = cam_dev->path_id;
 			ide0.b_read = total_bytes_read;
@@ -311,7 +314,8 @@ size_t disk_init(void)
 			++disks;	
 		}
 		else if ( cam_dev->path_id == 2 && cam_dev->target_id == 0) {
-			sprintf(ide1.path,"%s",devicename);
+			assert(sizeof(devicename) < sizeof(ide1.path));
+			strlcpy(ide0.path,devicename, sizeof(ide1.path));
 			ide1.target_id = cam_dev->target_id;		
 			ide1.path_id = cam_dev->path_id;
 			ide1.b_read = total_bytes_read;
@@ -331,7 +335,8 @@ size_t disk_init(void)
 			++disks;
 		}
 		else if ( cam_dev->path_id == 3 && cam_dev->target_id == 0) {
-			sprintf(ide2.path,"%s",devicename);
+			assert(sizeof(devicename) < sizeof(ide2.path));
+			strlcpy(ide0.path,devicename, sizeof(ide2.path));
 			ide2.target_id = cam_dev->target_id;		
 			ide2.path_id = cam_dev->path_id;
 			ide2.b_read = total_bytes_read;
@@ -351,7 +356,8 @@ size_t disk_init(void)
 			++disks;
 		}
 		else if ( cam_dev->path_id == 4 && cam_dev->target_id == 0) {
-			sprintf(ide3.path,"%s",devicename);
+			assert(sizeof(devicename) < sizeof(ide3.path));
+			strlcpy(ide0.path,devicename, sizeof(ide3.path));
 			ide3.target_id = cam_dev->target_id;		
 			ide3.path_id = cam_dev->path_id;
 			ide3.b_read = total_bytes_read;
@@ -371,11 +377,11 @@ size_t disk_init(void)
 			++disks;
 		}
 		else { /* something went wrong here */
-			err(1, "unknown path_id or target_id");
+			err(1, "unknown path_id or target_id in %s line %d", __FUNCTION__, __LINE__);
 		}
 
 		if(di > 3)
-			err(1, "Illegal number of devices in devstat()");
+			err(1, "Illegal number of devices in devstat() in %s line %d", __FUNCTION__, __LINE__);
 
 		cam_close_device(cam_dev);
 		free(devicename);
@@ -397,34 +403,43 @@ void* hpex49x_thread_run (void *arg)
     long double etime = 1.00;
 	int led_state = 0;
 	struct timespec tv = { .tv_sec = 0, .tv_nsec = BLINK_DELAY };
+	int thID = pthread_getthreadid_np();
 
 	while(thread_run) {
 
 		if( (pthread_spin_lock(&hpex49x_gpio_lock)) == EDEADLK ){
 
 			syslog(LOG_NOTICE, "Deadlock condition in HP disk %d function %s line %d",mediasmart.HDD, __FUNCTION__, __LINE__ );
-			fprintf(stderr, "Deadlock return from pthread_spin_lock from thread for HP disk %d in %s line %d",mediasmart.HDD, __FUNCTION__, __LINE__);
+			fprintf(stderr, "Deadlock return from pthread_spin_lock from thread %d for HP disk %d in %s line %d\n",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			thread_run = 0;
 			pthread_spin_unlock(&hpex49x_gpio_lock);
 		}
+		/* check to see if a device change occured and was identified in another thread before lock acquisiton */
+		if( openkvm <= 0 || cur.dinfo == NULL || thread_run == 0) {
+			fprintf(stderr, "Thread %d terminating due to conditions: openkvm: %d cur.dinfo: %d thread_run: %ld in %s line %d\n", thID, openkvm, (cur.dinfo == NULL) ? 0 : 1, thread_run, __FUNCTION__, __LINE__);
+			thread_run = 0;
+			pthread_spin_unlock(&hpex49x_gpio_lock);
+			break;
+		}
+
 		int retval = devstat_getdevs(kd, &cur);
+
 		if( retval == 1 ) {
 			thread_run = 0; /* end the threads so we can re-initialize */
 			dev_change = 1; /* a device has changed and we must re-initialize */
 			if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
-				err(1, "invalid return from pthread_spin_unlock from HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+				err(1, "invalid return from pthread_spin_unlock in thread %d from HP disk %d in %s line %d", thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			break;
 		}
-		
 		if (retval == -1 ) {
 			thread_run = 0; /* end the threads - we have a real problem */
 			dev_change = 0; /* not a device change */
 			
 			syslog(LOG_CRIT, "Bad return from devstat_getdevs() in thread for HP disk %d function %s line %d",mediasmart.HDD, __FUNCTION__, __LINE__ );
-			err(1, "invalid return from devstat_getdevs() from thread for HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+			err(1, "invalid return from devstat_getdevs() from thread %d for HP disk %d in %s line %d", thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			
 			if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
-				err(1, "invalid return from pthread_spin_unlock from HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+				err(1, "invalid return from pthread_spin_unlock in thread %d for HP disk %d in %s line %d", thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			
 			break; /* just in case */
 		} 
@@ -456,7 +471,7 @@ void* hpex49x_thread_run (void *arg)
 			err(1, "%s in %s line %d", devstat_errbuf, __FUNCTION__, __LINE__);
 		
 		if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
-			err(1, "invalid return from pthread_spin_unlock from thread for HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+			err(1, "invalid return from pthread_spin_unlock from thread %d for HP disk %d in %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 
 		if( ( mediasmart.b_read != mediasmart.n_read ) && ( mediasmart.b_write != mediasmart.n_write) ) {
 
@@ -466,6 +481,7 @@ void* hpex49x_thread_run (void *arg)
 			if(debug) {
 				printf("Read I/O = %li Write I/O = %li \n", mediasmart.n_read, mediasmart.n_write);
 				printf("HP HDD is: %i \n", mediasmart.HDD);
+				printf("Thread ID is: %d\n", thID);
 			}
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, ON, mediasmart.red);
@@ -479,6 +495,7 @@ void* hpex49x_thread_run (void *arg)
 			if(debug) {
 				printf("Read I/O only and is: %li \n", mediasmart.n_read);
 				printf("HP HDD is: %i \n", mediasmart.HDD);
+				printf("Thread ID is: %d\n", thID);
 			}
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, ON, mediasmart.red);
@@ -491,6 +508,7 @@ void* hpex49x_thread_run (void *arg)
 			if(debug) {
 				printf("Write I/O only and is: %li \n", mediasmart.n_write);
 				printf("HP HDD is: %i \n", mediasmart.HDD);
+				printf("Thread ID is: %d\n", thID);
 			}
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, OFF, mediasmart.red);
@@ -523,34 +541,43 @@ void* acer_thread_run (void *arg)
     long double etime = 1.00;
 	int led_state = 0;
 	struct timespec tv = { .tv_sec = 0, .tv_nsec = BLINK_DELAY };
+	int thID = pthread_getthreadid_np();
 
 	while(thread_run) {
 
 		if( (pthread_spin_lock(&hpex49x_gpio_lock)) == EDEADLK ){
 
-			syslog(LOG_NOTICE, "Deadlock condition in HP disk %d function %s line %d",mediasmart.HDD, __FUNCTION__, __LINE__ );
-			fprintf(stderr, "Deadlock return from pthread_spin_lock from thread for HP disk %d in %s line %d",mediasmart.HDD, __FUNCTION__, __LINE__);
+			syslog(LOG_NOTICE, "Deadlock condition in thread %d for HP disk %d function %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__ );
+			fprintf(stderr, "Deadlock return from pthread_spin_lock from thread %d for HP disk %d in %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			thread_run = 0;
 			pthread_spin_unlock(&hpex49x_gpio_lock);
 		}
+		/* check to see if a device change occured and was identified in another thread before we acquired the lock */
+		if( openkvm <= 0 || cur.dinfo == NULL || thread_run == 0) {
+			fprintf(stderr, "Thread %d terminating due to conditions: openkvm: %d cur.dinfo: %d thread_run: %ld in %s line %d\n", thID, openkvm, (cur.dinfo == NULL) ? 0 : 1, thread_run, __FUNCTION__, __LINE__);
+			thread_run = 0;
+			pthread_spin_unlock(&hpex49x_gpio_lock);
+			break;
+		}
+
 		int retval = devstat_getdevs(kd, &cur);
+
 		if( retval == 1 ) {
 			thread_run = 0; /* end the threads so we can re-initialize */
 			dev_change = 1; /* a device has changed and we must re-initialize */
 			if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
-				err(1, "invalid return from pthread_spin_unlock from HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+				err(1, "invalid return from pthread_spin_unlock from thread %d for HP disk %d in %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			break;
 		}
-		
 		if (retval == -1 ) {
 			thread_run = 0; /* end the threads - we have a real problem */
 			dev_change = 0; /* not a device change */
 			
-			syslog(LOG_CRIT, "Bad return from devstat_getdevs() in thread for HP disk %d function %s line %d",mediasmart.HDD, __FUNCTION__, __LINE__ );
-			err(1, "invalid return from devstat_getdevs() from thread for HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+			syslog(LOG_CRIT, "Bad return from devstat_getdevs() in thread %d for HP disk %d function %s line %d", thID, mediasmart.HDD, __FUNCTION__, __LINE__ );
+			err(1, "invalid return from devstat_getdevs() from thread %d for HP disk %d in %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 
 			if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
-				err(1, "invalid return from pthread_spin_unlock from HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+				err(1, "invalid return from pthread_spin_unlock from thread %d for HP disk %d in %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			break;
 		} 
         if (devstat_compute_statistics(&cur.dinfo->devices[mediasmart.dev_index], NULL, etime,
@@ -581,7 +608,7 @@ void* acer_thread_run (void *arg)
 			err(1, "%s in %s line %d", devstat_errbuf, __FUNCTION__, __LINE__);
 		
 		if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
-			err(1, "invalid return from pthread_spin_unlock from thread for HP disk %d in %s line %d", mediasmart.HDD, __FUNCTION__, __LINE__);
+			err(1, "invalid return from pthread_spin_unlock from thread %d for HP disk %d in %s line %d", thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 
 		if( ( mediasmart.b_read != mediasmart.n_read ) && ( mediasmart.b_write != mediasmart.n_write) ) {
 
@@ -591,6 +618,7 @@ void* acer_thread_run (void *arg)
 			if(debug) {
 				printf("Read I/O = %li Write I/O = %li \n", mediasmart.n_read, mediasmart.n_write);
 				printf("HP HDD is: %i \n", mediasmart.HDD);
+				printf("Thread ID is: %d\n", thID);
 			}
 			set_acer_led(LED_BLUE, ON, mediasmart.blue);
 			set_acer_led(LED_RED, ON, mediasmart.red);
@@ -604,6 +632,7 @@ void* acer_thread_run (void *arg)
 			if(debug) {
 				printf("Read I/O only and is: %li \n", mediasmart.n_read);
 				printf("HP HDD is: %i \n", mediasmart.HDD);
+				printf("Thread ID is: %d\n", thID);
 			}
 			set_acer_led(LED_BLUE, ON, mediasmart.blue);
 			set_acer_led(LED_RED, ON, mediasmart.red);
@@ -616,6 +645,7 @@ void* acer_thread_run (void *arg)
 			if(debug) {
 				printf("Write I/O only and is: %li \n", mediasmart.n_write);
 				printf("HP HDD is: %i \n", mediasmart.HDD);
+				printf("Thread ID is: %d\n", thID);
 			}
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, OFF, mediasmart.red);
@@ -644,6 +674,10 @@ void* acer_thread_run (void *arg)
 size_t run_mediasmart(void)
 {
 	int num_threads = 0;
+
+	/* System LED function takes from enum { LED_OFF, LED_ON, LED_BLINK } in header */
+	setsystemled( LED_RED, LED_OFF);
+	setsystemled( LED_BLUE, LED_OFF);
 
 	for(int i = 0; i < hpdisks; i++) {
         if ( (pthread_create(&hpexled_led[i], &attr, &hpex49x_thread_run, &hpex49x[i])) != 0)
@@ -741,10 +775,6 @@ int main (int argc, char **argv)
 	if (init_hpex49x_led() != 1 )
 		err(1, "Unknown return from led initialization in %s line %d", __FUNCTION__, __LINE__);
 
-	/* System LED function takes from enum { LED_OFF, LED_ON, LED_BLINK } in header */
-	setsystemled( LED_RED, LED_OFF);
-	setsystemled( LED_BLUE, LED_OFF);
-
 	if ( run_as_daemon ) {
 		if (daemon( 0, 0 ) > 0 )
 			err(1, "Unable to daemonize :");
@@ -783,14 +813,15 @@ int main (int argc, char **argv)
 				switch(retval) {
 					case 1:
 						free(cur.dinfo);
-						kvm_close(kd);
+						cur.dinfo = NULL;
+						openkvm = kvm_close(kd); /* should return -1 */
 						free(dev_select); /* found this out the hard way - see man devstat_buildmatch */
 						free(matches); /* same here */
 						syslog(LOG_NOTICE, "New or removed device detected - reinitializing");
 						if(debug)
 							printf("\n\n**** New/Removed Device Detected - re-initializing ****\n\n");
 						hpdisks = disk_init();
-
+						init_hpex49x_led();
 						if(hpdisks <= 0)
 							err(1, "Unknown return from disk initialization in %s line %d", __FUNCTION__, __LINE__);
 						dev_change = 0;
