@@ -315,7 +315,7 @@ size_t disk_init(void)
 		}
 		else if ( cam_dev->path_id == 2 && cam_dev->target_id == 0) {
 			assert(sizeof(devicename) < sizeof(ide1.path));
-			strlcpy(ide0.path,devicename, sizeof(ide1.path));
+			strlcpy(ide1.path,devicename, sizeof(ide1.path));
 			ide1.target_id = cam_dev->target_id;		
 			ide1.path_id = cam_dev->path_id;
 			ide1.b_read = total_bytes_read;
@@ -336,7 +336,7 @@ size_t disk_init(void)
 		}
 		else if ( cam_dev->path_id == 3 && cam_dev->target_id == 0) {
 			assert(sizeof(devicename) < sizeof(ide2.path));
-			strlcpy(ide0.path,devicename, sizeof(ide2.path));
+			strlcpy(ide2.path,devicename, sizeof(ide2.path));
 			ide2.target_id = cam_dev->target_id;		
 			ide2.path_id = cam_dev->path_id;
 			ide2.b_read = total_bytes_read;
@@ -357,7 +357,7 @@ size_t disk_init(void)
 		}
 		else if ( cam_dev->path_id == 4 && cam_dev->target_id == 0) {
 			assert(sizeof(devicename) < sizeof(ide3.path));
-			strlcpy(ide0.path,devicename, sizeof(ide3.path));
+			strlcpy(ide3.path,devicename, sizeof(ide3.path));
 			ide3.target_id = cam_dev->target_id;		
 			ide3.path_id = cam_dev->path_id;
 			ide3.b_read = total_bytes_read;
