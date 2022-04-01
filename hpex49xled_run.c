@@ -90,7 +90,7 @@ int openkvm = 1; /* track changes to kvm_t *kd status */
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
 
-const char *VERSION = "1.0.1";
+const char *VERSION = "1.0.2";
 const char *progname;
 extern const char *hardware;
 
