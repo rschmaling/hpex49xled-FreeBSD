@@ -36,6 +36,11 @@
 /////// March 31, 2022
 /////// - Initial Release
 /////// - 
+/////// - April 3, 2022
+/////// - code cleanup - removed unnecessary NULL values from devstat_compute_statistics() and u_int64_t total_bytes as we don't need to calculate those anymore
+/////// - cleaned up the debug output for disk read/write during activity monitoring
+/////// - upped the version to 1.0.3
+///////
 #include <stdio.h>
 #include <err.h>
 #include <limits.h>
@@ -81,7 +86,7 @@ size_t maxshowdevs;
 size_t thread_run = 0;
 size_t dev_change = 0;
 size_t hpdisks = 0;
-char *HD = "IDE";
+char *HD = "ide";
 size_t debug = 0;
 size_t HP = 1; /* for now set all options to HP */
 int io; 
@@ -90,7 +95,7 @@ int openkvm = 1; /* track changes to kvm_t *kd status */
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
 
-const char *VERSION = "1.0.2";
+const char *VERSION = "1.0.3";
 const char *progname;
 extern const char *hardware;
 
@@ -162,7 +167,7 @@ const char* desc(void)
 size_t disk_init(void) 
 {
     size_t dn, di;
-    u_int64_t total_bytes, total_bytes_read, total_bytes_write; 
+    u_int64_t total_bytes_read, total_bytes_write; 
     char *devicename;
 	struct cam_device *cam_dev = NULL;
     long double etime = 1.00; /* unneeded for our needs but passed in case of future need */
@@ -240,31 +245,7 @@ size_t disk_init(void)
 
         di = dev_select[dn].position;
 		/* etime is not used for these statistics - passing for completeness */
-        if (devstat_compute_statistics(&cur.dinfo->devices[di], NULL, etime,
-        DSM_TOTAL_BYTES, &total_bytes,
-        DSM_TOTAL_BYTES_READ, &total_bytes_read,
-        DSM_TOTAL_BYTES_WRITE, &total_bytes_write,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL, 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL, 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        DSM_NONE) != 0)
+        if (devstat_compute_statistics(&cur.dinfo->devices[di], NULL, etime, DSM_TOTAL_BYTES_READ, &total_bytes_read, DSM_TOTAL_BYTES_WRITE, &total_bytes_write, DSM_NONE) != 0)
 			err(1, "%s in %s line %d", devstat_errbuf, __FUNCTION__, __LINE__);
 
 		if ((dev_select[dn].selected == 0) || (dev_select[dn].selected > maxshowdevs))
@@ -399,7 +380,6 @@ size_t disk_init(void)
 void* hpex49x_thread_run (void *arg)
 {
 	struct hpled mediasmart = *(struct hpled *)arg;
-    u_int64_t total_bytes; 
     long double etime = 1.00;
 	int led_state = 0;
 	struct timespec tv = { .tv_sec = 0, .tv_nsec = BLINK_DELAY };
@@ -443,31 +423,8 @@ void* hpex49x_thread_run (void *arg)
 			
 			break; /* just in case */
 		} 
-        if (devstat_compute_statistics(&cur.dinfo->devices[mediasmart.dev_index], NULL, etime,
-        DSM_TOTAL_BYTES, &total_bytes,
-        DSM_TOTAL_BYTES_READ, &mediasmart.n_read,
-        DSM_TOTAL_BYTES_WRITE, &mediasmart.n_write,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL, 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL, 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        DSM_NONE) != 0)
+        if (devstat_compute_statistics(&cur.dinfo->devices[mediasmart.dev_index], NULL, etime, DSM_TOTAL_BYTES_READ, &mediasmart.n_read,
+        	DSM_TOTAL_BYTES_WRITE, &mediasmart.n_write, DSM_NONE) != 0)
 			err(1, "%s in %s line %d", devstat_errbuf, __FUNCTION__, __LINE__);
 		
 		if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
@@ -478,11 +435,9 @@ void* hpex49x_thread_run (void *arg)
 			mediasmart.b_read = mediasmart.n_read;
 			mediasmart.b_write = mediasmart.n_write;
 
-			if(debug) {
-				printf("Read I/O = %li Write I/O = %li \n", mediasmart.n_read, mediasmart.n_write);
-				printf("HP HDD is: %i \n", mediasmart.HDD);
-				printf("Thread ID is: %d\n", thID);
-			}
+			if(debug) 
+				printf("HDD is: %i Thread is: %d Read I/O = %li Write I/O = %li \n", mediasmart.HDD, thID, mediasmart.n_read, mediasmart.n_write);
+
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, ON, mediasmart.red);
 			led_state = 1;
@@ -492,11 +447,9 @@ void* hpex49x_thread_run (void *arg)
 
 			mediasmart.b_read = mediasmart.n_read;
 
-			if(debug) {
-				printf("Read I/O only and is: %li \n", mediasmart.n_read);
-				printf("HP HDD is: %i \n", mediasmart.HDD);
-				printf("Thread ID is: %d\n", thID);
-			}
+			if(debug)
+				printf("HDD is: %i Thread ID is: %d Read I/O is: %li\n", mediasmart.HDD, thID, mediasmart.n_read);
+
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, ON, mediasmart.red);
 			led_state = 1;
@@ -505,15 +458,12 @@ void* hpex49x_thread_run (void *arg)
 
 			mediasmart.b_write = mediasmart.n_write;
 
-			if(debug) {
-				printf("Write I/O only and is: %li \n", mediasmart.n_write);
-				printf("HP HDD is: %i \n", mediasmart.HDD);
-				printf("Thread ID is: %d\n", thID);
-			}
+			if(debug)
+				printf("HP HDD is: %i Thread ID is: %d Write I/O is: %li\n", mediasmart.HDD, thID, mediasmart.n_write);
+
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, OFF, mediasmart.red);
-			// if(hpex49x.hphdd == 4) // this is how I discovered the race condition....
-			//	printf("Firing %ld - Write IO is: %ld \n", hpex49x.hphdd, n_wio);
+
 			led_state = 1;
 		}
 		else {
@@ -537,7 +487,6 @@ void* hpex49x_thread_run (void *arg)
 void* acer_thread_run (void *arg)
 {
 	struct hpled mediasmart = *(struct hpled *)arg;
-    u_int64_t total_bytes; 
     long double etime = 1.00;
 	int led_state = 0;
 	struct timespec tv = { .tv_sec = 0, .tv_nsec = BLINK_DELAY };
@@ -580,31 +529,8 @@ void* acer_thread_run (void *arg)
 				err(1, "invalid return from pthread_spin_unlock from thread %d for HP disk %d in %s line %d",thID, mediasmart.HDD, __FUNCTION__, __LINE__);
 			break;
 		} 
-        if (devstat_compute_statistics(&cur.dinfo->devices[mediasmart.dev_index], NULL, etime,
-        DSM_TOTAL_BYTES, &total_bytes,
-        DSM_TOTAL_BYTES_READ, &mediasmart.n_read,
-        DSM_TOTAL_BYTES_WRITE, &mediasmart.n_write,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL, 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL, 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        DSM_NONE) != 0)
+        if (devstat_compute_statistics(&cur.dinfo->devices[mediasmart.dev_index], NULL, etime, DSM_TOTAL_BYTES_READ, &mediasmart.n_read,
+        	DSM_TOTAL_BYTES_WRITE, &mediasmart.n_write, DSM_NONE) != 0)
 			err(1, "%s in %s line %d", devstat_errbuf, __FUNCTION__, __LINE__);
 		
 		if( (pthread_spin_unlock(&hpex49x_gpio_lock)) != 0)
@@ -615,11 +541,9 @@ void* acer_thread_run (void *arg)
 			mediasmart.b_read = mediasmart.n_read;
 			mediasmart.b_write = mediasmart.n_write;
 
-			if(debug) {
-				printf("Read I/O = %li Write I/O = %li \n", mediasmart.n_read, mediasmart.n_write);
-				printf("HP HDD is: %i \n", mediasmart.HDD);
-				printf("Thread ID is: %d\n", thID);
-			}
+			if(debug) 
+				printf("HDD is: %i Thread is: %d Read I/O = %li Write I/O = %li \n", mediasmart.HDD, thID, mediasmart.n_read, mediasmart.n_write);
+
 			set_acer_led(LED_BLUE, ON, mediasmart.blue);
 			set_acer_led(LED_RED, ON, mediasmart.red);
 			led_state = 1;
@@ -629,11 +553,9 @@ void* acer_thread_run (void *arg)
 
 			mediasmart.b_read = mediasmart.n_read;
 
-			if(debug) {
-				printf("Read I/O only and is: %li \n", mediasmart.n_read);
-				printf("HP HDD is: %i \n", mediasmart.HDD);
-				printf("Thread ID is: %d\n", thID);
-			}
+			if(debug)
+				printf("HDD is: %i Thread ID is: %d Read I/O is: %li\n", mediasmart.HDD, thID, mediasmart.n_read);
+
 			set_acer_led(LED_BLUE, ON, mediasmart.blue);
 			set_acer_led(LED_RED, ON, mediasmart.red);
 			led_state = 1;
@@ -642,15 +564,12 @@ void* acer_thread_run (void *arg)
 
 			mediasmart.b_write = mediasmart.n_write;
 
-			if(debug) {
-				printf("Write I/O only and is: %li \n", mediasmart.n_write);
-				printf("HP HDD is: %i \n", mediasmart.HDD);
-				printf("Thread ID is: %d\n", thID);
-			}
+			if(debug)
+				printf("HP HDD is: %i Thread ID is: %d Write I/O is: %li\n", mediasmart.HDD, thID, mediasmart.n_write);
+
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, OFF, mediasmart.red);
-			// if(hpex49x.hphdd == 4) // this is how I discovered the race condition....
-			//	printf("Firing %ld - Write IO is: %ld \n", hpex49x.hphdd, n_wio);
+
 			led_state = 1;
 		}
 		else {
@@ -807,8 +726,7 @@ int main (int argc, char **argv)
 	while (run) {
 		switch (thread_run){
 			case 1: {
-				int retval;
-				retval = run_mediasmart(); /* returns value of dev_change */
+				int retval = run_mediasmart(); /* returns value of dev_change */
 
 				switch(retval) {
 					case 1:

@@ -71,7 +71,7 @@ int num_devices;
 static struct device_selection *dev_select;
 struct devstat_match *matches;
 int maxshowdevs;
-char *HD = "IDE";
+char *HD = "ide";
 
 int
 main (int argc, char **argv)
@@ -192,42 +192,6 @@ main (int argc, char **argv)
 
 		free((void *)devicename);
 	}
-	switch (devstat_getdevs(kd, &cur)) {
-        case -1:
-        		errx(1, "%s", devstat_errbuf);
-           		break;
-        case 1: {
-           		int retval;
-				
-        		select_mode = DS_SELECT_ONLY;
-                num_devices = cur.dinfo->numdevs;
-                generation = cur.dinfo->generation;
-                retval = devstat_selectdevs(&dev_select, &num_selected,
-                                            &num_selections,
-                                            &select_generation,
-                                            generation,
-                                            cur.dinfo->devices,
-                                            num_devices, matches,
-                                            num_matches,
-                                            specified_devices,
-                                            num_devices_specified,
-                                            select_mode, maxshowdevs,
-                                            0);
-                        switch(retval) {
-                        case -1:
-                                errx(1, "%s", devstat_errbuf);
-                                break;
-                        case 1:
-                                break;
-                        default:
-                                break;
-                        }
-                        break;
-            }
-            default:
-					break;
-    }
-	devstats(init, etime);
 	/* last.snap_time = cur.snap_time; */
 	free(cur.dinfo);
 	cur.dinfo = NULL;

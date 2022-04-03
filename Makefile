@@ -36,6 +36,6 @@ clean:
 
 .PHONY: install
 
-install: all
+install:
 	test -f $(RCPREFIX)/hpex49xled || install -m 755 $(RCFILE) $(RCPREFIX)/hpex49xled
 	install -s -m 700 $(TARGETS) $(PREFIX)/bin/
