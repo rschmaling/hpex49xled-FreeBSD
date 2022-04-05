@@ -90,7 +90,6 @@ char *HD = "ide";
 size_t debug = 0;
 size_t HP = 1; /* for now set all options to HP */
 int io; 
-int openkvm = 1; /* track changes to kvm_t *kd status */
 
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
@@ -173,14 +172,13 @@ size_t disk_init(void)
     long double etime = 1.00; /* unneeded for our needs but passed in case of future need */
 	size_t disks = 0;
 	num_matches = 0;
-	openkvm = 1;
 
 	matches = NULL;
 
 	if (devstat_buildmatch(HD, &matches, &num_matches) != 0)
 		errx(1, "%s in %s line %d", devstat_errbuf,__FUNCTION__, __LINE__);
 
-	if(debug) printf("\nAfter devstat_buildmatch - Matches = %d Number of Matches = %d \n", matches->num_match_categories, num_matches);
+	if(debug) printf("\nAfter devstat_buildmatch - Matched Categories: %d Number of Matches: %d \n", matches->num_match_categories, num_matches);
 
 	if (devstat_checkversion(kd) < 0)
 		errx(1, "%s in %s line %d", devstat_errbuf, __FUNCTION__, __LINE__);
@@ -216,7 +214,7 @@ size_t disk_init(void)
 	generation = cur.dinfo->generation;
 	num_devices_specified = num_matches;
 
-	/* calculate all updates since boot */
+	/* calculate all updates since boot - and I can't get bintime to work no matter what I do */
 	cur.snap_time = 0;
 
 	if(debug) {
@@ -371,6 +369,10 @@ size_t disk_init(void)
 	specified_devices[0] = NULL;
 	free(specified_devices);
 	specified_devices = NULL;
+	free(dev_select);
+	dev_select = NULL;
+	free(matches);
+	matches = NULL;
 	if(debug)
 		printf("\nsize_t disks is %ld before returning from %s line %d\n", disks, __FUNCTION__, __LINE__);
 	return (disks);
@@ -395,8 +397,8 @@ void* hpex49x_thread_run (void *arg)
 			pthread_spin_unlock(&hpex49x_gpio_lock);
 		}
 		/* check to see if a device change occured and was identified in another thread before lock acquisiton */
-		if( openkvm <= 0 || cur.dinfo == NULL || thread_run == 0) {
-			fprintf(stderr, "Thread %d terminating due to conditions: openkvm: %d cur.dinfo: %d thread_run: %ld in %s line %d\n", thID, openkvm, (cur.dinfo == NULL) ? 0 : 1, thread_run, __FUNCTION__, __LINE__);
+		if( cur.dinfo == NULL || thread_run == 0) {
+			fprintf(stderr, "Thread %d terminating due to conditions: cur.dinfo: %d thread_run: %ld in %s line %d\n", thID, (cur.dinfo == NULL) ? 0 : 1, thread_run, __FUNCTION__, __LINE__);
 			thread_run = 0;
 			pthread_spin_unlock(&hpex49x_gpio_lock);
 			break;
@@ -502,8 +504,8 @@ void* acer_thread_run (void *arg)
 			pthread_spin_unlock(&hpex49x_gpio_lock);
 		}
 		/* check to see if a device change occured and was identified in another thread before we acquired the lock */
-		if( openkvm <= 0 || cur.dinfo == NULL || thread_run == 0) {
-			fprintf(stderr, "Thread %d terminating due to conditions: openkvm: %d cur.dinfo: %d thread_run: %ld in %s line %d\n", thID, openkvm, (cur.dinfo == NULL) ? 0 : 1, thread_run, __FUNCTION__, __LINE__);
+		if( cur.dinfo == NULL || thread_run == 0) {
+			fprintf(stderr, "Thread %d terminating due to conditions: cur.dinfo: %d thread_run: %ld in %s line %d\n", thID, (cur.dinfo == NULL) ? 0 : 1, thread_run, __FUNCTION__, __LINE__);
 			thread_run = 0;
 			pthread_spin_unlock(&hpex49x_gpio_lock);
 			break;
@@ -732,9 +734,8 @@ int main (int argc, char **argv)
 					case 1:
 						free(cur.dinfo);
 						cur.dinfo = NULL;
-						openkvm = kvm_close(kd); /* should return -1 */
-						free(dev_select); /* found this out the hard way - see man devstat_buildmatch */
-						free(matches); /* same here */
+						if(dev_select != NULL) free(dev_select); /* found this out the hard way - see man devstat_buildmatch */
+						if(matches != NULL) free(matches); /* same here */
 						syslog(LOG_NOTICE, "New or removed device detected - reinitializing");
 						if(debug)
 							printf("\n\n**** New/Removed Device Detected - re-initializing ****\n\n");
@@ -798,7 +799,6 @@ void sigterm_handler(int s)
 
 	free(cur.dinfo);
 	cur.dinfo = NULL;
-	kvm_close(kd);
 	free(dev_select); /* found this out the hard way - see man devstat_buildmatch */
 	free(matches); /* same here */
 	syslog(LOG_NOTICE,"Signal Received. Exiting");

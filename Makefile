@@ -7,7 +7,7 @@ CXX = g++
 FLAGS = -O2 -Wall -Werror -std=gnu99 -march=native 
 CFLAGS = $(FLAGS)
 CXXFLAGS = $(CFLAGS)
-LDFLAGS = -lcam -ldevstat -lkvm -lm -lpthread
+LDFLAGS = -lcam -ldevstat -lm -lpthread
 RCPREFIX = /usr/local/etc/rc.d
 PREFIX = /usr/local
 RCFILE = hpex49xled.rc
@@ -27,12 +27,12 @@ ${TARGETS}: ${OBJS}
 	${CC} -o $@ $? ${CFLAGS} ${LDFLAGS}
 
 camtest: camtest.c
-	${CC} -o $@ $? ${CFLAGS} ${LDFLAGS}
+	${CC} -o $@ $? ${CFLAGS} -lcam -ldevstat
 
 .PHONY: clean
 
 clean:
-	rm -f *.o hpex49xled *.core 
+	rm -f *.o hpex49xled *.core camtest
 
 .PHONY: install
 

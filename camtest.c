@@ -48,6 +48,7 @@
 #include <kvm.h>
 #include <devstat.h>
 #include <camlib.h>
+#include <paths.h>
 #include <sys/param.h>
 #include <sys/errno.h>
 #include <sys/resource.h>
@@ -69,7 +70,7 @@ char* curdir(char *str)
 static struct statinfo cur;
 int num_devices;
 static struct device_selection *dev_select;
-struct devstat_match *matches;
+struct devstat_match *matches = NULL;
 int maxshowdevs;
 char *HD = "ide";
 
@@ -88,7 +89,7 @@ main (int argc, char **argv)
 	int num_matches = 0;
 	int num_devices_specified;
 	int num_selected, num_selections;
-	const char *errbuff;
+	// const char *errbuff;
 
 	if (geteuid() !=0 ) {
 		printf("Try running as root to avoid Segfault and core dump \n");
@@ -96,13 +97,6 @@ main (int argc, char **argv)
 	}
 
 	matches = NULL;
-
-	errbuff = curdir(argv[0]);
-
-	kd = kvm_open(NULL, NULL, NULL, O_RDONLY, errbuff);
-
-	if(kd == NULL) 
-		err(1, "kvm_open returned error %s in %s line %d", errbuff, __FUNCTION__, __LINE__);
 
 	if (devstat_buildmatch(HD, &matches, &num_matches) != 0)
 		errx(1, "%s in %s line %d", devstat_errbuf,__FUNCTION__, __LINE__);
@@ -148,6 +142,7 @@ main (int argc, char **argv)
 
 	printf("Max Show Devices = %d \n", maxshowdevs);
 	printf("Number of Devices = %d \n", num_devices);
+	printf("Looked for only %s devices\n", HD);
 	printf("Generation = %ld \n", generation);
 	printf("Number of Devices Specified = %d \n", num_devices_specified);
 	printf("Specified Devices is = %s \n", specified_devices[0]);
@@ -192,14 +187,14 @@ main (int argc, char **argv)
 
 		free((void *)devicename);
 	}
-	/* last.snap_time = cur.snap_time; */
 	free(cur.dinfo);
 	cur.dinfo = NULL;
 	free(specified_devices[0]);
 	specified_devices[0] = NULL;
 	free(specified_devices);
 	specified_devices = NULL;
-	kvm_close(kd);
+	free((void *)dev_select);
+	free((void *)matches);
 	return 0;
 
 }
