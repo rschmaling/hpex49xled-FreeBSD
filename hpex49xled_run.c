@@ -94,7 +94,7 @@ int io;
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
 
-const char *VERSION = "1.0.3";
+const char *VERSION = "1.0.5";
 const char *progname;
 extern const char *hardware;
 
