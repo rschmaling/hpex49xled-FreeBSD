@@ -201,10 +201,14 @@ size_t disk_init(void)
 	if (specified_devices == NULL)
 		err(1, "calloc failed for specified_device in %s line %d", __FUNCTION__, __LINE__);
 
-	specified_devices[0] = malloc(strlen("11") * sizeof(char *));
+	/* Two characters would suffice - but bigger is sometimes better, especially when its zeroed */
+	specified_devices[0] = calloc(1, strlen("111"));
 
 	if( specified_devices[0] == NULL )
-		err(1, "malloc failed for specified_devices[a]");
+		err(1, "Allocation Error: failed to allocate memory for specified_devices[a] in %s line %d", __FUNCTION__, __LINE__);
+
+	if(num_devices != cur.dinfo->numdevs)
+		err(1, "Number of devices is inconsistent in %s line %d", __FUNCTION__, __LINE__);
 
 	assert(sizeof(specified_devices[0]) > sizeof("4"));
 	strlcpy(specified_devices[0], "4", sizeof(specified_devices[0]));
@@ -218,12 +222,13 @@ size_t disk_init(void)
 	cur.snap_time = 0;
 
 	if(debug) {
-		printf("Max Show Devices = %ld \n", maxshowdevs);
-		printf("Number of Devices = %ld \n", num_devices);
-		printf("Generation = %ld \n", generation);
-		printf("Number of Devices Specified = %d \n", num_devices_specified);
-		printf("Specified Devices is = %s \n", specified_devices[0]);
-		printf("End of devstat selection section in %s line %d\n\n\n", __FUNCTION__, __LINE__);
+		printf("\n");
+		printf("Max Show Devices            : %ld \n", maxshowdevs);
+		printf("Number of Devices           : %ld \n", num_devices);
+		printf("Generation                  : %ld \n", generation);
+		printf("Number of Devices Specified : %d \n", num_devices_specified);
+		printf("Specified Devices is        : %s \n", specified_devices[0]);
+		printf("End of devstat preparation in %s line %d\n\n\n", __FUNCTION__, __LINE__);
 	}
 	dev_select = NULL;
 	select_mode = DS_SELECT_ONLY;
@@ -255,19 +260,19 @@ size_t disk_init(void)
 		cam_dev = cam_open_device(devicename, O_RDWR);
 
 		if(debug) {
-			printf("Struct devinfo device name after adding 0-3 is %s \n",devicename);
-			printf("The string length of %s is %ld\n", devicename, (strlen(devicename)));
-			printf("CAM device name is : %s \n", cam_dev->device_name);
-			printf("The Unit Number is: %i \n", cam_dev->dev_unit_num);
-			printf("The Sim Name is: %s \n", cam_dev->sim_name);
-			printf("The sim_unit_number is: %i \n", cam_dev->sim_unit_number);
-			printf("The bus_id is: %i \n", cam_dev->bus_id);
-			printf("The target_lun is: %li \n",cam_dev->target_lun);
-			printf("The target_id is: %i \n",cam_dev->target_id);
-			printf("The path_id is: %i \n",cam_dev->path_id);
-			printf("The pd_type is: %i \n",cam_dev->pd_type);
-			printf("The value to be assined to hpled.dev_index is %ld\n", di);
-			printf("The file descriptor is: %i \n\n\n",cam_dev->fd);
+			printf("\nStruct devinfo device name after adding 0-3 is :  %s \n",devicename);
+			printf("The string length of %s is : %ld\n", devicename, (strlen(devicename)));
+			printf("CAM device name is           : %s \n", cam_dev->device_name);
+			printf("The Unit Number is           : %i \n", cam_dev->dev_unit_num);
+			printf("The Sim Name is              : %s \n", cam_dev->sim_name);
+			printf("The sim_unit_number is       : %i \n", cam_dev->sim_unit_number);
+			printf("The bus_id is                : %i \n", cam_dev->bus_id);
+			printf("The target_lun is            : %li \n",cam_dev->target_lun);
+			printf("The target_id is             : %i \n",cam_dev->target_id);
+			printf("The path_id is               : %i \n",cam_dev->path_id);
+			printf("The pd_type is               : %i \n",cam_dev->pd_type);
+			printf("The hpled.dev_index value is : %ld\n", di);
+			printf("The file descriptor is       : %i \n\n\n",cam_dev->fd);
 		}
 		/* on a HP EX48x and EX49x there are only 4 IDE devices. These will always be the same */
 		/* rather than mess around with dynamically allocating and figuring them out, Just if/else if them here */

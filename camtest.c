@@ -109,7 +109,7 @@ main (int argc, char **argv)
 	if ((num_devices = devstat_getnumdevs(kd)) < 0)
 		err(1, "can't get number of devices in %s line %d", __FUNCTION__, __LINE__);
 
-	printf("Number of devices is: %d \n", num_devices);
+	printf("Number of devices from devstat_getnumddevs() : %d \n", num_devices);
 
 	cur.dinfo = (struct devinfo *)calloc(1, sizeof(struct devinfo));
 
@@ -124,13 +124,17 @@ main (int argc, char **argv)
 	if (specified_devices == NULL)
 		err(1, "calloc failed for specified_device in %s line %d", __FUNCTION__, __LINE__);
 
-	specified_devices[0] = malloc(strlen("11") * sizeof(char *));
+	specified_devices[0] = calloc(1, strlen("111"));
 
 	if( specified_devices[0] == NULL )
 		err(1, "malloc failed for specified_devices[a]");
 
-	if( ( sprintf(specified_devices[0],"%i", 4)) <= 0)
-		err(1, "Unable to sprintf() into specified_devices[0] in %s line %d", __FUNCTION__, __LINE__);
+	size_t ret = strlcpy(specified_devices[0], "4", sizeof(specified_devices[0]));
+	if(ret > sizeof(specified_devices[0]))
+		err(1, "ERROR: incorrect sizeof() value in %s line %d", __FUNCTION__, __LINE__);
+
+	if(num_devices != cur.dinfo->numdevs)
+		err(1, "Number of devices is inconsistent in %s line %d", __FUNCTION__, __LINE__);
 
 	maxshowdevs = 4;
 	num_devices = cur.dinfo->numdevs;
@@ -140,13 +144,13 @@ main (int argc, char **argv)
 	/* calculate all updates since boot */
 	cur.snap_time = 0;
 
-	printf("Max Show Devices = %d \n", maxshowdevs);
-	printf("Number of Devices = %d \n", num_devices);
-	printf("Looked for only %s devices\n", HD);
-	printf("Generation = %ld \n", generation);
-	printf("Number of Devices Specified = %d \n", num_devices_specified);
-	printf("Specified Devices is = %s \n", specified_devices[0]);
-	printf("End of devstat selection section in %s line %d\n\n\n", __FUNCTION__, __LINE__);
+	printf("\nLooking at %s devices only\n", HD);
+	printf("Max Show Devices            : %d \n", maxshowdevs);
+	printf("Number of Devices           : %d \n", num_devices);
+	printf("Generation                  : %ld \n", generation);
+	printf("Number of Devices Specified : %d \n", num_devices_specified);
+	printf("Specified Devices is        : %s \n", specified_devices[0]);
+	printf("\n\n");
 	dev_select = NULL;
 	select_mode = DS_SELECT_ONLY;
 
@@ -169,23 +173,23 @@ main (int argc, char **argv)
 		if (asprintf(&devicename, "/dev/%s%d", cur.dinfo->devices[di].device_name, cur.dinfo->devices[di].unit_number) == -1)
 			errx(1, "asprintf in %s line %d", __FUNCTION__, __LINE__); 
 
-		printf("the device name is %s \n",devicename);
 		cam_dev = cam_open_device(devicename, O_RDWR);
 
-		printf("This devices selection status: %d \n", dev_select[dn].selected);
-		printf("Device Name is : %s \n", cam_dev->device_name);
-		printf("The Unit Number is: %i \n", cam_dev->dev_unit_num);
-		printf("The Sim Name is: %s \n", cam_dev->sim_name);
-		printf("The sim_unit_number is: %i \n", cam_dev->sim_unit_number);
-		printf("The bus_id is: %i \n", cam_dev->bus_id);
-		printf("The target_lun is: %li \n",cam_dev->target_lun);
-		printf("The target_id is: %i \n",cam_dev->target_id);
-		printf("The path_id is: %i \n",cam_dev->path_id);
-		printf("The pd_type is: %i \n",cam_dev->pd_type);
-		printf("The file descriptor is: %i \n\n",cam_dev->fd);
-
+		printf("Device Name                   : %s \n",devicename);	
+		printf("This devices selection status : %d \n", dev_select[dn].selected);
+		printf("Device Name                   : %s \n", cam_dev->device_name);
+		printf("The Unit Number               : %i \n", cam_dev->dev_unit_num);
+		printf("The Sim Name                  : %s \n", cam_dev->sim_name);
+		printf("The sim_unit_number           : %i \n", cam_dev->sim_unit_number);
+		printf("The bus_id                    : %i \n", cam_dev->bus_id);
+		printf("The target_lun                : %li \n",cam_dev->target_lun);
+		printf("The target_id                 : %i \n",cam_dev->target_id);
+		printf("The path_id                   : %i \n",cam_dev->path_id);
+		printf("The pd_type                   : %i \n",cam_dev->pd_type);
+		printf("The file descriptor           : %i \n\n",cam_dev->fd);
 
 		free((void *)devicename);
+		cam_close_device(cam_dev);
 	}
 	free(cur.dinfo);
 	cur.dinfo = NULL;
