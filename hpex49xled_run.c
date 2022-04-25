@@ -94,7 +94,7 @@ int io;
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
 
-const char *VERSION = "1.0.5";
+const char *VERSION = "1.0.3";
 const char *progname;
 extern const char *hardware;
 
@@ -390,6 +390,7 @@ void* hpex49x_thread_run (void *arg)
     long double etime = 1.00;
 	int led_state = 0;
 	struct timespec tv = { .tv_sec = 0, .tv_nsec = BLINK_DELAY };
+	struct timespec blink = { .tv_sec = 0, .tv_nsec = 7500000}; /* see if we can't get the lights to blink */
 	int thID = pthread_getthreadid_np();
 
 	while(thread_run) {
@@ -445,8 +446,18 @@ void* hpex49x_thread_run (void *arg)
 			if(debug) 
 				printf("HDD is: %i Thread is: %d Read I/O = %li Write I/O = %li \n", mediasmart.HDD, thID, mediasmart.n_read, mediasmart.n_write);
 
+			/* the lights are on and we want them to blink. Turn them off, wait, turn them on, wait, rinse...repeat */
+			if(led_state) {
+				set_hpex_led(LED_BLUE, OFF, mediasmart.blue); 
+				set_hpex_led(LED_RED, OFF, mediasmart.red);	
+
+				nanosleep(&blink, NULL);
+			}
+
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, ON, mediasmart.red);
+
+			nanosleep(&blink, NULL);
 			led_state = 1;
 
 		}
@@ -456,9 +467,18 @@ void* hpex49x_thread_run (void *arg)
 
 			if(debug)
 				printf("HDD is: %i Thread ID is: %d Read I/O is: %li\n", mediasmart.HDD, thID, mediasmart.n_read);
+			
+			if(led_state){
+				set_hpex_led(LED_BLUE, OFF, mediasmart.blue);
+				set_hpex_led(LED_RED, OFF, mediasmart.red);	
+
+				nanosleep(&blink, NULL);
+			}
 
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, ON, mediasmart.red);
+
+			nanosleep(&blink, NULL);
 			led_state = 1;
 		}
 		else if( mediasmart.b_write != mediasmart.n_write ) {
@@ -467,17 +487,25 @@ void* hpex49x_thread_run (void *arg)
 
 			if(debug)
 				printf("HP HDD is: %i Thread ID is: %d Write I/O is: %li\n", mediasmart.HDD, thID, mediasmart.n_write);
+			
+			if(led_state){
+				set_hpex_led(LED_BLUE, OFF, mediasmart.blue);
+				set_hpex_led(LED_RED, OFF, mediasmart.red);	
 
+				nanosleep(&blink, NULL);	
+			}
+			
 			set_hpex_led(LED_BLUE, ON, mediasmart.blue);
 			set_hpex_led(LED_RED, OFF, mediasmart.red);
 
+			nanosleep(&blink, NULL);		
 			led_state = 1;
 		}
 		else {
 			/* turn off the active light */
 			nanosleep(&tv, NULL);
 
-			if ( (led_state != 0)) {
+			if ( led_state ) {
 				set_hpex_led(LED_BLUE, OFF, mediasmart.blue);
 				set_hpex_led(LED_RED, OFF, mediasmart.red);
 				led_state = 0;
@@ -583,7 +611,7 @@ void* acer_thread_run (void *arg)
 			/* turn off the active light */
 			nanosleep(&tv, NULL);
 
-			if ( (led_state != 0)) {
+			if ( led_state != 0 ) {
 				set_acer_led(LED_BLUE, OFF, mediasmart.blue);
 				set_acer_led(LED_RED, OFF, mediasmart.red);
 				led_state = 0;
