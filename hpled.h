@@ -53,7 +53,8 @@ struct hpled
 	char path[12];
 };
 
-#define BLINK_DELAY 50000000 // for nanosleep() timespec struct - blinking delay for LEDs in nanoseconds
+#define LED_DELAY 50000000 // for nanosleep() struct timespec - delay for turning off LEDs in nanoseconds
+#define BLINK_DELAY 8500000 // for nanosleep() struct timespec - blink delay to indicate activity
 #define MAX_HDD_LEDS 4 // Maximum number of Drives to work on - four bays in the HPEX49x and HPEX48x
 
 /////////////////////////////////////////////////////////////////////////
