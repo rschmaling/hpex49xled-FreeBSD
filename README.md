@@ -12,3 +12,4 @@ A few notes:
    trace information (like what camtest is telling you the box sees) and I'll track down the issue and fix the code.
 5. Running 'make install' as root - install expects that /usr/local/etc/rc.d exists. This is where the .rc file is installed to. If you don't want it to go there, change the rcprefix in the make file.
 6. after running 'make install' as root - you will need to add the following to the bottom of your /etc/rc.conf file: hpex49xled_enable="YES" - just copy and paste as-is.
+7. Update Monitoring: hpex49xled now monitors for freebsd-update updatesready. You must have "@daily root /usr/sbin/freebsd-update -t root cron" in cron or equivilent. Use the --update command line parameter. Add hpex49xled_args="--update" in /etc/rc.conf to enable at startup.
