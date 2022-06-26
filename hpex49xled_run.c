@@ -94,7 +94,7 @@ int io;
 struct hpled ide0, ide1, ide2, ide3 ;
 struct hpled hpex49x[4];
 
-const char *VERSION = "1.0.5";
+const char *VERSION = "1.1.0";
 const char *progname;
 extern const char *hardware;
 
@@ -114,6 +114,15 @@ void* hpex49x_thread_run (void *arg);
 void* acer_thread_run (void *arg);
 void sigterm_handler(int s);
 const char* desc(void);
+
+/* update monitor - monitor for freebsd-update */
+size_t update_monitor = 0; /* monitor freebsd-update for fetched updates */
+pthread_t updatemonitor; /* update monitor thread instance */
+void *update_monitor_thread(void *arg);
+void thread_cleanup_handler(void *arg);
+size_t updates_ready(void);
+
+/* external functions */
 extern void setsystemled( int led_type, int state );
 extern void set_hpex_led( int led_type, int state, size_t led );
 extern void set_acer_led( int led_type, int state, size_t led );
@@ -132,6 +141,7 @@ int show_help(char * progname )
 	printf("%s %s %s", "Usage: ", this,"\n");
 	printf("-d, --debug 	Print Debug Messages\n");
 	printf("-D, --daemon 	Detach and Run as a Daemon - do not use this in service setup \n");
+	printf("-u, --update 	Monitor freebsd-update for fetched updates requires adding - @daily root /usr/sbin/freebsd-update -t root cron to /etc/crontab\n");
 	printf("-h, --help	Print This Message\n");
 	printf("-v, --version	Print Version Information\n");
 
@@ -162,6 +172,102 @@ const char* desc(void)
 { 
 		return hardware;	
 };
+
+void thread_cleanup_handler(void *arg)
+{
+        setsystemled( LED_RED, LED_OFF);
+        setsystemled( LED_BLUE, LED_OFF);
+        syslog(LOG_NOTICE,"Update Monitor Thread Cleaned Up and Ending");
+        if(debug) printf("\n\n\nUpdate Monitor Thread Ending in %s line %d\n",__FUNCTION__, __LINE__);
+
+}
+
+size_t updates_ready(void)
+{
+   FILE* freebsd_check = popen("/usr/sbin/freebsd-update updatesready", "r");
+
+	if(freebsd_check == NULL)
+	{
+		fprintf(stderr, "Unable to open /usr/sbin/freebsd-update for reading in %s line %d", __FUNCTION__, __LINE__);
+		return -1;
+	}
+	char *line = NULL;
+	size_t len = 0;
+	size_t res = getline(&line, &len, freebsd_check);
+	pclose(freebsd_check);
+	
+	if(debug)
+		printf("Return from freebsd-update is: %s \n", line);
+
+	if(res == -1)
+	{
+		fprintf(stderr, "Could not read line res = %ld len = %ld line = %s \n", res, len, line);
+		return -1;
+	}
+
+	return (strncmp(line, "No updates are available to install.", 36) == 0) ? 0 : 1;
+}
+
+void *update_monitor_thread(void *arg)
+{
+	sigset_t sigempty;
+	sigemptyset( &sigempty );
+	struct timespec timeout = { .tv_sec = 3600, .tv_nsec = 0 }; /* wait an hour between checks */
+
+	if(debug)
+        printf("\nUpdate Monitor Thread Executing\n");
+
+	size_t monitor_update_thread = 1;
+    pthread_cleanup_push(thread_cleanup_handler, NULL);
+    syslog(LOG_NOTICE,"FreeBSD-Updates Monitor Thread Initialized. Now Monitoring for FreeBSD System Updates");
+        
+    while(monitor_update_thread)
+	{
+		if (pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL) != 0)
+			err(1, "Unable to set pthread_setcancelstate to disable in %s line %d", __FUNCTION__, __LINE__);
+		
+		size_t update_count = updates_ready();
+
+		if (update_count == -1) 
+		{
+			monitor_update_thread = 0;
+			syslog(LOG_NOTICE, "Update Monitor Thread Encountered an issue and is terminating");
+			fprintf(stderr, "illegal return from status_update() in %s line %d", __FUNCTION__, __LINE__);
+			break;
+		}
+		else if (update_count == 1) /* updates found - hopefully */
+		{
+			setsystemled(LED_BLUE, LED_OFF);
+			setsystemled(LED_RED, LED_ON);
+			syslog(LOG_NOTICE, "UPDATE MONITOR THREAD - freebsd-update indicates updates ready");
+		}
+		else /* we do not need to account for a return of zero from updates_ready() - just set the system led off and move on to pselect() */
+			setsystemled(LED_BLUE | LED_RED, LED_OFF);
+
+		if (pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL) != 0)
+			err(1, "Unable to set pthread_setcancelstate to enable in %s line %d", __FUNCTION__, __LINE__);
+
+		// sleep(43200);
+		// cancellation point
+		// sigset_t sigempty;
+		// sigemptyset( &sigempty );
+		// struct timespec timeout = { 900, 0 };
+		
+		size_t t = pselect( 0, NULL, NULL, NULL, &timeout, &sigempty );
+        
+		if( t < 0 )
+		{
+			monitor_update_thread = 0;
+        	if( EINTR != errno ) err(1, "Exiting due to signal");
+            break;
+        }
+    }        
+    pthread_cleanup_pop(1); //Remove handler and execute it.
+
+    if(debug) printf("\n\n\nUpdate Monitor Thread Ending\n in %s line %d\n",__FUNCTION__, __LINE__);
+
+    return NULL;
+}
 
 size_t disk_init(void) 
 {
@@ -586,7 +692,7 @@ void* acer_thread_run (void *arg)
 				nanosleep(&t_blink, NULL);
 			}
 			set_acer_led(LED_BLUE, ON, mediasmart.blue);
-			set_acer_led(LED_RED, ON, mediasmart.red);
+			set_acer_led(LED_RED, OFF, mediasmart.red);
 			led_state = 1;
 			nanosleep(&t_blink, NULL);
 
@@ -663,9 +769,14 @@ size_t run_mediasmart(void)
 			printf("HP HDD is %i - created thread %i \n", hpex49x[i].HDD, num_threads);
     }
 
-	syslog(LOG_NOTICE,"Initialized monitor threads. Monitoring with %i threads", num_threads);
+	syslog(LOG_NOTICE,"Initialized Hard Disk Monitor Threads. Monitoring Disk Activity with %i Threads", num_threads);
 	syslog(LOG_NOTICE,"Now monitoring for drive activity");
-		
+
+	if(update_monitor) {
+		if(pthread_create(&updatemonitor, &attr, &update_monitor_thread, NULL) != 0)
+			err(1, "Unable to create thread for update monitor");
+	}
+
 	for(size_t i = 0; i < hpdisks; i++) {
         if ( (pthread_join(hpexled_led[i], NULL)) != 0) {
 			/* unsure why thread joining keeps failing on FreeBSD. This works fine on Linux */
@@ -673,6 +784,14 @@ size_t run_mediasmart(void)
 			syslog(LOG_NOTICE, "Unable to join threads - this is only informational - in %s line %d", __FUNCTION__, __LINE__);
     	}
 	}
+
+	if(update_monitor) {
+		if( (pthread_cancel(updatemonitor)) != 0)
+			err(1, "Unable to cancel update monitor thread in %s line %d", __FUNCTION__, __LINE__);
+		if( (pthread_join(updatemonitor, NULL)) != 0)
+			err(1, "Unable to join thread update_monitor_thread in %s line %d before close", __FUNCTION__, __LINE__);
+	}
+	
 	if(HP) {
 			for(size_t i = 0; i < MAX_HDD_LEDS; i++){
 				set_hpex_led(LED_BLUE, i, OFF);
@@ -705,13 +824,14 @@ int main (int argc, char **argv)
         { "debug",          no_argument,       0, 'd' },
         { "daemon",         no_argument,       0, 'D' },
         { "help",           no_argument,       0, 'h' },
+		{ "update",			no_argument,	   0, 'u' },
         { "version",        no_argument,       0, 'v' },
         { 0, 0, 0, 0 },
     };
 
     // pass command line arguments
     while ( 1 ) {
-        const int c = getopt_long( argc, argv, "dDhv?", long_opts, 0 );
+        const int c = getopt_long( argc, argv, "dDhuv?", long_opts, 0 );
         if ( -1 == c ) break;
 
         switch ( c ) {
@@ -723,6 +843,9 @@ int main (int argc, char **argv)
                 break;
             case 'h': // help!
                 return show_help(argv[0]);
+			case 'u': //update
+				update_monitor++;
+				break; 
             case 'v': // our version
                 return show_version(argv[0] );
             case '?': // no idea
